@@ -31,140 +31,139 @@
 	v231114: Changes related to waitForOpenWindow. F1: Updated sensibleUnits function and removed now-redundant indexOfArray function.
 	v240222: Improved grammar, added toolbar flashes.
 	v240227: Saved path of registered position file to prefs. F1: Update safeSaveAndClose.
+	v250313: Restored missing ; on line 102. Beautified.
 	*/
-	macroL = "IJStitch_DSX_Mosaic_From_Selected_Image(new_plugin)_v240227-f1.ijm";
+	macroL = "IJStitch_DSX_Mosaic_From_Selected_Image(new_plugin)_v250313.ijm";
 	prefsNameKey = "asc.IJStitch.Prefs.";
-	if (nImages<1){
+	if (nImages < 1) {
 		open(File.openDialog("This macro currently requires an open DSX image, please select one"));
-		if (nImages<1) exit("This macro currently requires an open DSX image");
+		if (nImages < 1) exit("This macro currently requires an open DSX image");
 	}
 	orImageID = getImageID();
 	fileName = getInfo("image.filename");
 	fWOE = File.getNameWithoutExtension(fileName);
-	ext = substring(fileName, fWOE.length+1);
+	ext = substring(fileName, fWOE.length + 1);
 	dir = getInfo("image.directory");
 	// allowableFormats = newArray("dsx", "tif", "png", "jpeg");
 	foundDSXMapFiles = getDSXPanoFilesWithSameExtension(dir, ext);
-	if (foundDSXMapFiles.length<1) exit("No tiles were found");
+	if (foundDSXMapFiles.length < 1) exit("No tiles were found");
 	dsxEXIFData = getExifData(dir + foundDSXMapFiles[0]);
-	tileCount =  foundDSXMapFiles.length;
-	if (tileCount<2) exit("Only found " + tileCount + "files; that is not enough to create a panorama");
-	dirF = substring(dir, 0, dir.length-1);
+	tileCount = foundDSXMapFiles.length;
+	if (tileCount < 2) exit("Only found " + tileCount + "files; that is not enough to create a panorama");
+	dirF = substring(dir, 0, dir.length - 1);
 	micronS = getInfo("micrometer.abbreviation");
 	fS = File.separator();
 	bits = bitDepth();
 	//Array.print(foundDSXMapFiles);
 	mapSets = getUniqueElementPrefixes(foundDSXMapFiles, "_X");
 	mapSetsL = mapSets.length;
-	if(mapSetsL==0) exit("No DSX Mosaic files found");
+	if (mapSetsL == 0) exit("No DSX Mosaic files found");
 	infoColor = "#0076B6";
 	leq = fromCharCode(0x2264);
 	infoFontSize = 11.5;
 	reportLog = "";
 	Dialog.create("DSX IJ Stitch Options \(" + macroL + "\)");
-		Dialog.addHelp("https://imagej.net/plugins/image-stitching");
-		// Dialog.addMessage("Total DSX mosaic files in directory = " + tileCount, 11.5, infoColor);
-		dirL = lengthOf(dir);
-		Dialog.addString("Input/output directory:", dir, minOf(62, lengthOf(dir)+5));
-		if (dirL>62){
-			Dialog.setInsets(-5, 0, 0);
-			Dialog.addMessage("Path: " + dir, minOf(infoFontSize, 1000/dirL), infoColor);
-		} 
-		if (mapSetsL>1) {
-			defRows =  minOf(mapSetsL, 3);
-			Dialog.addRadioButtonGroup("Choose map set:", mapSets, defRows, round(mapSetsL/defRows), mapSets[0]);
+	Dialog.addHelp("https://imagej.net/plugins/image-stitching");
+	// Dialog.addMessage("Total DSX mosaic files in directory = " + tileCount, 11.5, infoColor);
+	dirL = lengthOf(dir);
+	Dialog.addString("Input/output directory:", dir, minOf(62, lengthOf(dir) + 5));
+	if (dirL > 62) {
+		Dialog.setInsets(-5, 0, 0);
+		Dialog.addMessage("Path: " + dir, minOf(infoFontSize, 1000 / dirL), infoColor);
+	}
+	if (mapSetsL > 1) {
+		defRows = minOf(mapSetsL, 3);
+		Dialog.addRadioButtonGroup("Choose map set:", mapSets, defRows, round(mapSetsL / defRows), mapSets[0]);
+	}
+	tileListMessage = "";
+	for (i = 0; i < mapSetsL; i++) {
+		tileListMessage += mapSets[i] + ": total tiles in set: " + countArrayElementsWithString(foundDSXMapFiles, mapSets[i]) + " out of " + tileCount + " DSX files in directory";
+		if (i + 1 < mapSetsL) tileListMessage += "\n";
+	}
+	Dialog.addMessage(tileListMessage, infoFontSize, infoColor);
+	Dialog.addNumber("Stitch 1st 'n' tiles only:", 0, 0, 4, "tiles \(leave as '0' for all\)");
+	overlapX = parseInt(getDSXExifTagFromMetaData(dsxEXIFData, "OverlapSize", true));
+	if (overlapX <= 10) overlapX = call("ij.Prefs.get", prefsNameKey + "overlapX", 20);
+	Dialog.addNumber("Overlap X\(Y\) ", overlapX, 0, 3, "% \(also Y overlap if no value entered below\)");
+	Dialog.addNumber("Overlap Y*", "", 0, 3, "% *\(leave blank if the same as X\)");
+	if (overlapX <= 10) useStagePosn = true;
+	else useStagePosn = false;
+	Dialog.addCheckbox("Use actual stage positions instead of overlap \(default if overlap " + leq + "10\)", useStagePosn);
+	message = "Default options not set in this version: channels_for_registration=[Red, Green and Blue] rgb_order=rgb";
+	message += "\n                  'subpixel_accuracy' and 'Save computation time' options will be used because why not?";
+	message += "\n                  List tiles row-by-row \(DSX list is column-by-column\)";
+	message += "\n                  Compute overlap \(otherwise would use approximate grid coordinates\)";
+	Dialog.addMessage(message, infoFontSize, infoColor);
+	blendingOptions = newArray("Linear Blending", "Average", "Median", "Max. Intensity", "Min. Intensity", "Do not fuse images \(only write TileConfiguration\)");
+	blendingTxt = "Linear Blending: \tIn the overlapping area, the intensities are smoothly adjusted between overlapping images.\n";
+	blendingTxt += "Average: \tIn the overlapping area, the average intensity of all overlapping images is used.\n";
+	blendingTxt += "Median: \tIn the overlapping area, the median intensity of all overlapping images is used.\n";
+	blendingTxt += "Max. Intensity: In the overlapping area, the maximum intensity between all overlapping images is used.\n";
+	blendingTxt += "Min. Intensity: In the overlapping area the minimum intensity between all overlapping images is used.\n";
+	blendingTxt += "Overlay into Composite: all channels of all input images will be put into the output image as separate channels\n";
+	blendingTxt += "Do not fuse images: no output images will be computed, just the overlap is computed";
+	Dialog.addMessage(blendingTxt, infoFontSize, infoColor);
+	blendingOption = call("ij.Prefs.get", prefsNameKey + "blending", "Linear Blending");
+	Dialog.addChoice("Blending:", blendingOptions, blendingOption);
+	// Dialog.addRadioButtonGroup("Blending:", blendingOptions, 1, blendingOptions.length, blendingOptions[0]);
+	Dialog.addNumber("Fusion value:", 1.5, 1, 4, "1.5 default, no documentation, weird results >7");
+	Dialog.addNumber("Regression value:", 0.3, 1, 4, "Assumed non-overlapping if below this. 'Good' values are typically >0.7");
+	Dialog.addNumber("max/avg:", 3.5, 1, 4, "Default threshold error for discarding is 2.5");
+	Dialog.addNumber("Absolute value:", 3.5, 1, 4, "Links removed if the absolute displacement is greater \(default 3.5\)");
+	fusionAreas = Array.resample(Array.getSequence(2), 11);
+	Dialog.addRadioButtonGroup("Blended Area Fraction, TBH this doesn't seem to have much impact \(default is 0.2\):", fusionAreas, 1, 5, "0.2");
+	if (toLowerCase(getDSXExifTagFromMetaData(dsxEXIFData, "IsMonochrome", true)) == "true") isMonochrome = true;
+	else isMonochrome = false;
+	if (isMonochrome) Dialog.addCheckbox("Open image was acquired as monochrome; convert stitched image to 8-bit grayscale?", true);
+	Dialog.addCheckbox("Check for unregistered tiles and save config file for missing files", true);
+	checkboxOptions = newArray("Copy 1st tile metadata to stitched image?", "Decompose composite output", "Diagnostic output");
+	checkboxDefaults = newArray(true, true, false);
+	if (getSliceNumber() > 1) {
+		if (Stack.isHyperstack) {
+			hyper = true;
+			checkboxOptions = Array.concat("Add tiles as ROIs?", checkboxOptions);
+			checkboxDefaults = Array.concat(true, checkboxDefaults);
 		}
-		tileListMessage = "";
-		for (i=0;i<mapSetsL;i++){
-			tileListMessage += mapSets[i] + ": total tiles in set: " + countArrayElementsWithString(foundDSXMapFiles, mapSets[i]) + " out of " + tileCount + " DSX files in directory";
-			if(i+1<mapSetsL) tileListMessage += "\n";
-		} 
-		Dialog.addMessage(tileListMessage, infoFontSize, infoColor);
-		Dialog.addNumber("Stitch 1st 'n' tiles only:", 0, 0, 4, "tiles \(leave as '0' for all\)");
-		overlapX = parseInt(getDSXExifTagFromMetaData(dsxEXIFData, "OverlapSize", true));
-		if (overlapX<=10) overlapX = call("ij.Prefs.get", prefsNameKey+"overlapX", 20);
-		Dialog.addNumber("Overlap X\(Y\) ", overlapX, 0, 3, "% \(also Y overlap if no value entered below\)");
-		Dialog.addNumber("Overlap Y*", "", 0, 3, "% *\(leave blank if the same as X\)");
-		if (overlapX<=10) useStagePosn = true;
-		else useStagePosn = false;
-		Dialog.addCheckbox("Use actual stage positions instead of overlap \(default if overlap " + leq + "10\)", useStagePosn);
-		message = "Default options not set in this version: channels_for_registration=[Red, Green and Blue] rgb_order=rgb";
-		message += "\n                  'subpixel_accuracy' and 'Save computation time' options will be used because why not?";
-		message += "\n                  List tiles row-by-row \(DSX list is column-by-column\)";
-		message += "\n                  Compute overlap \(otherwise would use approximate grid coordinates\)";
-		Dialog.addMessage(message, infoFontSize, infoColor);
-		blendingOptions = newArray("Linear Blending", "Average", "Median", "Max. Intensity", "Min. Intensity", "Do not fuse images \(only write TileConfiguration\)");
-		blendingTxt = "Linear Blending: \tIn the overlapping area, the intensities are smoothly adjusted between overlapping images.\n";
-		blendingTxt += "Average: \tIn the overlapping area, the average intensity of all overlapping images is used.\n";
-		blendingTxt += "Median: \tIn the overlapping area, the median intensity of all overlapping images is used.\n";
-		blendingTxt += "Max. Intensity: In the overlapping area, the maximum intensity between all overlapping images is used.\n";
-		blendingTxt += "Min. Intensity: In the overlapping area the minimum intensity between all overlapping images is used.\n"
-		blendingTxt += "Overlay into Composite: all channels of all input images will be put into the output image as separate channels\n";
-		blendingTxt += "Do not fuse images: no output images will be computed, just the overlap is computed";
-		Dialog.addMessage(blendingTxt, infoFontSize, infoColor);
-		blendingOption = call("ij.Prefs.get", prefsNameKey+"blending", "Linear Blending");
-		Dialog.addChoice("Blending:", blendingOptions, blendingOption);
-		// Dialog.addRadioButtonGroup("Blending:", blendingOptions, 1, blendingOptions.length, blendingOptions[0]);
-		Dialog.addNumber("Fusion value:", 1.5, 1, 4, "1.5 default, no documentation, weird results >7");
-		Dialog.addNumber("Regression value:", 0.3, 1, 4, "Assumed non-overlapping if below this. 'Good' values are typically >0.7");
-		Dialog.addNumber("max/avg:", 3.5, 1, 4, "Default threshold error for discarding is 2.5");
-		Dialog.addNumber("Absolute value:", 3.5, 1, 4, "Links removed if the absolute displacement is greater \(default 3.5\)");
-		fusionAreas = Array.resample(Array.getSequence(2), 11);
-		Dialog.addRadioButtonGroup("Blended Area Fraction, TBH this doesn't seem to have much impact \(default is 0.2\):", fusionAreas, 1, 5, "0.2");
-		if (toLowerCase(getDSXExifTagFromMetaData(dsxEXIFData, "IsMonochrome", true))=="true") isMonochrome = true;
-		else isMonochrome = false;
-		if (isMonochrome) Dialog.addCheckbox("Open image was acquired as monochrome; convert stitched image to 8-bit grayscale?", true);
-		Dialog.addCheckbox("Check for unregistered tiles and save config file for missing files", true);
-		checkboxOptions = newArray("Copy 1st tile metadata to stitched image?", "Decompose composite output", "Diagnostic output");
-		checkboxDefaults = newArray(true, true, false);
-		if(getSliceNumber()>1){
-			if (Stack.isHyperstack){
-				hyper = true;
-				checkboxOptions = Array.concat("Add tiles as ROIs?", checkboxOptions);
-				checkboxDefaults = Array.concat(true, checkboxDefaults);
-			} 
-		}
-		else hyper = false;
-		rowN = 2;
-		colN = Math.ceil(checkboxOptions.length/rowN);
-		Dialog.addCheckboxGroup(rowN, colN, checkboxOptions, checkboxDefaults);
-		Dialog.addMessage("Use separate 'Stitch height-map from Registered Stitch Coords macro to assemble corresponding height-maps", infoFontSize, infoColor);
+	} else hyper = false;
+	rowN = 2;
+	colN = Math.ceil(checkboxOptions.length / rowN);
+	Dialog.addCheckboxGroup(rowN, colN, checkboxOptions, checkboxDefaults);
+	Dialog.addMessage("Use separate 'Stitch height-map from Registered Stitch Coords macro to assemble corresponding height-maps", infoFontSize, infoColor);
 	Dialog.show();
-		dir = Dialog.getString();
-		if (mapSetsL==1) prefixF = mapSets[0];
-		else prefixF = Dialog.getRadioButton();
-		tileMax = countArrayElementsWithString(foundDSXMapFiles, prefixF);
-		nTileLimit = Dialog.getNumber();
-		if (nTileLimit==0) tileLimit = tileMax;
-		else tileLimit = minOf(nTileLimit, tileMax);
-		overlapX = minOf(90, Dialog.getNumber());
-		call("ij.Prefs.set", prefsNameKey+"overlapX", overlapX);
-		overlapY = Dialog.getNumber();
-		if (isNaN(overlapY)) overlapY = overlapX;
-		else overlapY = minOf(90, overlapY);
-		useStagePosn = Dialog.getCheckbox();
-		rowByRow = true; /* simplified by this not being optional for this version */
-		computeOverlap = true; /* simplified by this not being optional for this version */
-		blendingOption = Dialog.getChoice();
-		call("ij.Prefs.set", prefsNameKey+"blending", blendingOption);
-		fusionVal = Dialog.getNumber();
-		regressionVal = Dialog.getNumber();
-		maxAvgVal = Dialog.getNumber();
-		absVal = Dialog.getNumber();
-		fusionFraction = Dialog.getRadioButton();
-		bshScript = "mpicbg.stitching.fusion.BlendingPixelFusion.fractionBlended = " + fusionFraction;
-		IJ.log("Temporary fractionBlend applied:")
-		eval("bsh", bshScript);
-		if (isMonochrome){
-			if (Dialog.getCheckbox()) grayConvert = true;
-		}
-		else grayConvert = false;
-		checkForMissingTiles = Dialog.getCheckbox();
-		if (hyper) addROIs = Dialog.getCheckbox();
-		else addROIs = false;
-		transferMetadata = Dialog.getCheckbox();
-		compoConvert = Dialog.getCheckbox();
-		diagnostics = Dialog.getCheckbox();
+	dir = Dialog.getString();
+	if (mapSetsL == 1) prefixF = mapSets[0];
+	else prefixF = Dialog.getRadioButton();
+	tileMax = countArrayElementsWithString(foundDSXMapFiles, prefixF);
+	nTileLimit = Dialog.getNumber();
+	if (nTileLimit == 0) tileLimit = tileMax;
+	else tileLimit = minOf(nTileLimit, tileMax);
+	overlapX = minOf(90, Dialog.getNumber());
+	call("ij.Prefs.set", prefsNameKey + "overlapX", overlapX);
+	overlapY = Dialog.getNumber();
+	if (isNaN(overlapY)) overlapY = overlapX;
+	else overlapY = minOf(90, overlapY);
+	useStagePosn = Dialog.getCheckbox();
+	rowByRow = true; /* simplified by this not being optional for this version */
+	computeOverlap = true; /* simplified by this not being optional for this version */
+	blendingOption = Dialog.getChoice();
+	call("ij.Prefs.set", prefsNameKey + "blending", blendingOption);
+	fusionVal = Dialog.getNumber();
+	regressionVal = Dialog.getNumber();
+	maxAvgVal = Dialog.getNumber();
+	absVal = Dialog.getNumber();
+	fusionFraction = Dialog.getRadioButton();
+	bshScript = "mpicbg.stitching.fusion.BlendingPixelFusion.fractionBlended = " + fusionFraction;
+	IJ.log("Temporary fractionBlend applied:")
+	eval("bsh", bshScript);
+	if (isMonochrome) {
+		if (Dialog.getCheckbox()) grayConvert = true;
+	} else grayConvert = false;
+	checkForMissingTiles = Dialog.getCheckbox();
+	if (hyper) addROIs = Dialog.getCheckbox();
+	else addROIs = false;
+	transferMetadata = Dialog.getCheckbox();
+	compoConvert = Dialog.getCheckbox();
+	diagnostics = Dialog.getCheckbox();
 	setBatchMode(true);
 	if (diagnostics) IJ.log("prefix chosen: " + prefixF + ", X overlap: " + overlapX + ", Y overlap: " + overlapY);
 	xMax = 0;
@@ -173,73 +172,74 @@
 	tileXs = newArray();
 	tileYs = newArray();
 	filteredDSXMapFiles = newArray();
-	for (i=0, filteredTileCount=0;i<tileCount && filteredTileCount<tileLimit;i++){
+	for (i = 0, filteredTileCount = 0; i < tileCount && filteredTileCount < tileLimit; i++) {
 		imageT = foundDSXMapFiles[i];
-		if(startsWith(imageT, prefixF)){
+		if (startsWith(imageT, prefixF)) {
 			filteredDSXMapFiles[filteredTileCount] = imageT;
-			if (filteredTileCount==0){
-				pSX =  lastIndexOf(imageT, "_X") + 2;
-				pSY =  lastIndexOf(imageT, "_Y") + 2;
-				digitN = abs(pSY-pSX) - 2;
+			if (filteredTileCount == 0) {
+				pSX = lastIndexOf(imageT, "_X") + 2;
+				pSY = lastIndexOf(imageT, "_Y") + 2;
+				digitN = abs(pSY - pSX) - 2;
 			}
-			tileXs[filteredTileCount] = parseInt(substring(imageT, pSX, pSX+digitN));
+			tileXs[filteredTileCount] = parseInt(substring(imageT, pSX, pSX + digitN));
 			xMax = maxOf(xMax, tileXs[filteredTileCount]);
-			tileYs[filteredTileCount] = parseInt(substring(imageT, pSY, pSY+digitN));
+			tileYs[filteredTileCount] = parseInt(substring(imageT, pSY, pSY + digitN));
 			yMax = maxOf(yMax, tileYs[filteredTileCount]);
 			filteredTileCount++;
 		}
 	}
 	tileN = filteredDSXMapFiles.length;
-	if(rowByRow){
+	if (rowByRow) {
 		lineByLineOrder = newArray();
-		for (i=0;i<filteredTileCount;i++)
-			lineByLineOrder[i] = (tileYs[i]-1)*yMax + tileXs[i]-1;
+		for (i = 0; i < filteredTileCount; i++)
+			lineByLineOrder[i] = (tileYs[i] - 1) * yMax + tileXs[i] - 1;
 		Array.sort(lineByLineOrder, filteredDSXMapFiles, tileXs, tileYs);
 	}
 	tileConfig = "# Define the number of dimensions we are working on\ndim = 2\n\n# Define the image coordinates\n";
 	tileConfigFP = tileConfig;
-	for (i=0;i<tileN;i++){
+	for (i = 0; i < tileN; i++) {
 		showProgress(i, tileN);
 		showStatus("Extracting image information");
-		if (i==0){
+		if (i == 0) {
 			dsxEXIFData = getExifData(dir + filteredDSXMapFiles[i]);
-			if (toLowerCase(getDSXExifTagFromMetaData(dsxEXIFData, "IsMonochrome", true))=="true") isMonochrome = true;
+			if (toLowerCase(getDSXExifTagFromMetaData(dsxEXIFData, "IsMonochrome", true)) == "true") isMonochrome = true;
 			else isMonochrome = false;
 			if (isMonochrome && grayConvert) grayConvert = true;
 			else grayConvert = false;
 			scaleImageTitle = filteredDSXMapFiles[i];
-			if (toLowerCase(ext)=="dsx"){
+			if (toLowerCase(ext) == "dsx") {
 				umPerPixelX = parseFloat(getDSXExifTagFromMetaData(dsxEXIFData, "ColorDataPerPixelX", true)) * 10E-7;
 				umPerPixelY = parseFloat(getDSXExifTagFromMetaData(dsxEXIFData, "ColorDataPerPixelY", true)) * 10E-7;
 				umPerPixelOrX = parseFloat(getDSXExifTagFromMetaData(dsxEXIFData, "ImageDataPerPixelX", true)) * 10E-7;
 				umPerPixelOrY = parseFloat(getDSXExifTagFromMetaData(dsxEXIFData, "ImageDataPerPixelY", true)) * 10E-7;
 				overlapXCheck = parseInt(getDSXExifTagFromMetaData(dsxEXIFData, "OverlapSize", true));
-				if (prefixF!=mapSets[0]){  /* Just in case the overlap is different within the folder */
-					if (overlapX!=overlapXCheck){
-						Dialog.create(macroL + ": Overlap mismatch check"){
+				if (prefixF != mapSets[0]) {
+					/* Just in case the overlap is different within the folder */
+					if (overlapX != overlapXCheck) {
+						Dialog.create(macroL + ": Overlap mismatch check") {
 							Dialog.addMessage("File overlap from header = " + overlapXCheck);
 							Dialog.addNumber("Overlap \(X overlap if Y value entered below\)", overlapX, 0, 3, "%");
 							Dialog.addNumber("Overlap Y \(if X and Y overlaps are different only\)", "", 0, 3, "%");
-						Dialog.show();
+							Dialog.show();
 							overlapX = minOf(90, Dialog.getNumber());
-							call("ij.Prefs.set", prefsNameKey+"overlapX", overlapX);
+							call("ij.Prefs.set", prefsNameKey + "overlapX", overlapX);
 							overlapY = Dialog.getNumber();
 							if (isNaN(overlapY)) overlapY = overlapX;
 							else overlapY = minOf(90, overlapY);
 						}
 					}
 				}
-				calRat = umPerPixelX/umPerPixelOrX;
-				if (calRat>1.001 || calRat<0.999) IJ.log("Note that for " + filteredDSXMapFiles[i] + " the stored output X scale \(" + umPerPixelX + " microns per pixel\) was different from the original acquisition scale \(" + umPerPixelOrX + " microns per pixel\). The output scale is used.");
+				calRat = umPerPixelX / umPerPixelOrX;
+				if (calRat > 1.001 || calRat < 0.999) IJ.log("Note that for " + filteredDSXMapFiles[i] + " the stored output X scale \(" + umPerPixelX + " microns per pixel\) was different from the original acquisition scale \(" + umPerPixelOrX + " microns per pixel\). The output scale is used.");
 				pixelW = umPerPixelX;
 				pixelH = umPerPixelY;
 				unit = micronS;
 				microscopeSettings = "DSX settings:\n";
 				refCodes = newArray("OverlapSize", "StitchingRowCount", "StitchingColumnCount", "ExtendMode", "ZRangeMode", "ZSliceTotal", "ZSliceCount", "ZStartPosition", "ZEndPosition", "ZRange", "ZPitchTravel", "StagePositionX", "StagePositionY", "ObjectiveLensID", "ObjectiveLensType", "ObjectiveLensMagnification", "ZoomMagnification", "OpiticalZoomMagnification", "DigitalZoomMagnification", "MapRoiTop", "MapRoiLeft", "MapRoiWidth", "MapRoiHeight", "ImageAspectRatio", "ImageTrimmingSize");
-				for (r=0;r<refCodes.length;r++) microscopeSettings += refCodes[r] + ": " + getDSXExifTagFromMetaData(dsxEXIFData, refCodes[r], true) + "\n";
+				for (r = 0; r < refCodes.length; r++) microscopeSettings += refCodes[r] + ": " + getDSXExifTagFromMetaData(dsxEXIFData, refCodes[r], true) + "\n";
 				if (diagnostics) IJ.log(microscopeSettings);
 				File.saveString(microscopeSettings, dir + File.getNameWithoutExtension(filteredDSXMapFiles[i]) + "_microscopeSettings.txt");
-				if (useStagePosn){
+				if (useStagePosn) {
 					stageX0um = parseInt(getDSXExifTagFromMetaData(dsxEXIFData, "StagePositionX", true)) * 10E-4; /* stage positions are in nm not pm */
 					stageY0um = parseInt(getDSXExifTagFromMetaData(dsxEXIFData, "StagePositionY", true)) * 10E-4;
 					tileXs[i] = 0;
@@ -248,78 +248,76 @@
 					tileConfig += "" + fileString;
 					tileConfigFP += "" + dir + fileString;
 				}
-			}
-			else getVoxelSize(pixelW, pixelH, voxelDepth, unit);
-			if(unit!="pixels"){
+			} else getVoxelSize(pixelW, pixelH, voxelDepth, unit);
+			if (unit != "pixels") {
 				newPixelWidthNewUnits = sensibleUnits(pixelW, unit);
 				newPixelHeightNewUnits = sensibleUnits(pixelH, unit);
 				pixelW = newPixelWidthNewUnits[0];
 				pixelH = newPixelHeightNewUnits[0];
 				unit = newPixelWidthNewUnits[1];
 			}
-			aspectRatio = pixelW/pixelH;
+			aspectRatio = pixelW / pixelH;
 			imageWidth = Image.width;
 			imageHeight = Image.height;
 			run("Set Scale...", "distance=1 known=&pixelW pixel=&aspectRatio unit=&unit");
-			reportLog = "Image used for scale: " + scaleImageTitle + " \(pixel width = " + pixelW + " " + unit + ", aspect ratio = " + aspectRatio + "\), "
-				+ imageWidth + " x " + imageHeight + " pixels";
-			if (useStagePosn)	reportLog += ", stage positions used for tile positions";
+			reportLog = "Image used for scale: " + scaleImageTitle + " \(pixel width = " + pixelW + " " + unit + ", aspect ratio = " + aspectRatio + "\), " +
+				imageWidth + " x " + imageHeight + " pixels";
+			if (useStagePosn) reportLog += ", stage positions used for tile positions";
 			else {
-				overlapAdvX = imageWidth * (100-overlapX) /100;
-				overlapAdvY = imageHeight * (100-overlapY) /100;	
+				overlapAdvX = imageWidth * (100 - overlapX) / 100;
+				overlapAdvY = imageHeight * (100 - overlapY) / 100;
 				reportLog += ", x advance = " + overlapAdvX;
-				if (overlapAdvX!=overlapAdvY) reportLog += ", y advance = " + overlapAdvY;
+				if (overlapAdvX != overlapAdvY) reportLog += ", y advance = " + overlapAdvY;
 			}
+		} else if (useStagePosn) {
+			dsxEXIFDataTemp = getExifData(dir + filteredDSXMapFiles[i]);
+			stageXum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionX", true)) * 10E-4;
+			stageYum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionY", true)) * 10E-4;
+			if (diagnostics) {
+				IJ.log("stageXum, stageXum-stageX0um, stageXum-stageX0um/pixelW, stageYum-stageY0um/pixelH");
+				IJ.log(stageXum + ", " + stageXum - stageX0um + ", " + (stageXum - stageX0um) / pixelW + ", " + (stageYum - stageY0um) / pixelH);
+			}
+			tileXs[i] = abs((stageXum - stageX0um) / pixelW);
+			tileYs[i] = abs((stageYum - stageY0um) / pixelH);
+			fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s(tileXs[i], 1) + ", " + d2s(tileYs[i], 1) + "\)\n";
+			tileConfig += "" + fileString;
+			tileConfigFP += "" + dir + fileString;
 		}
-		else if (useStagePosn){
-				dsxEXIFDataTemp = getExifData(dir + filteredDSXMapFiles[i]);
-				stageXum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionX", true)) * 10E-4;
-				stageYum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionY", true)) * 10E-4;
-				if (diagnostics){
-					IJ.log("stageXum, stageXum-stageX0um, stageXum-stageX0um/pixelW, stageYum-stageY0um/pixelH");
-					IJ.log(stageXum+", "+stageXum-stageX0um+", "+(stageXum-stageX0um)/pixelW+", "+(stageYum-stageY0um)/pixelH);
-				}
-				tileXs[i] = abs((stageXum - stageX0um) / pixelW);
-				tileYs[i] = abs((stageYum - stageY0um) / pixelH);
-				fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s(tileXs[i], 1) + ", " +  d2s(tileYs[i], 1) + "\)\n";
-				tileConfig += "" + fileString;
-				tileConfigFP += "" + dir + fileString;
-		}
-		if (!useStagePosn){
-			fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s((tileXs[i]-1)*overlapAdvX, 0) + ", " +  d2s((tileYs[i]-1)*overlapAdvY, 0) + "\)\n";
+		if (!useStagePosn) {
+			fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s((tileXs[i] - 1) * overlapAdvX, 0) + ", " + d2s((tileYs[i] - 1) * overlapAdvY, 0) + "\)\n";
 			tileConfig += "" + fileString;
 			tileConfigFP += "" + dir + fileString;
 		}
 	}
-	if (reportLog!= "") IJ.log(reportLog);
+	if (reportLog != "") IJ.log(reportLog);
 	run("Set Scale...", "distance=1 known=&pixelW pixel=&aspectRatio unit=&unit");
 	title1FP = prefixF + "_Full-Path-TileConfiguration";
-  	title2FP = "["+title1FP+"]";
- 	f = title2FP;
-  	if (isOpen(title1FP))  print(f, "\\Update:"); // clears the window
-  	else run("Text Window...", "name="+title2FP+" width=72 height=8 menu");
+	title2FP = "[" + title1FP + "]";
+	f = title2FP;
+	if (isOpen(title1FP)) print(f, "\\Update:"); // clears the window
+	else run("Text Window...", "name=" + title2FP + " width=72 height=8 menu");
 	if (diagnostics) IJ.log("Full path tile configuration:\n" + tileConfigFP);
- 	print(f, tileConfigFP);
-	configFPPath = dir + title1FP +".txt";
+	print(f, tileConfigFP);
+	configFPPath = dir + title1FP + ".txt";
 	saveAs("Text", configFPPath); /* Saved for compatibility with older versions */
 	run("Close"); /* Need to close window and start fresh as there is no rename function for text windows */
 	title1 = prefixF + "_TileConfiguration";
-	title2 = "["+title1+"]";
+	title2 = "[" + title1 + "]";
 	f = title2;
-  	if (isOpen(title1)) print(f, "\\Update:"); // clears the window
-  	else run("Text Window...", "name="+title2+" width=72 height=8 menu");
+	if (isOpen(title1)) print(f, "\\Update:"); // clears the window
+	else run("Text Window...", "name=" + title2 + " width=72 height=8 menu");
 	if (diagnostics) IJ.log("Tile configuration:\n" + tileConfig);
 	print(f, tileConfig);
-	configPath = dir + title1 +".txt";
+	configPath = dir + title1 + ".txt";
 	saveAs("Text", configPath);
 	run("Close");
 	if (addROIs) optionROIs = " add_tiles_as_rois";
 	else optionROIs = " ";
-	stitchOptions = "type=[Positions from file] order=[Defined by TileConfiguration] directory=[&dir] layout_file="+title1+".txt fusion_method=[&blendingOption] fusion="+fusionVal+" regression_threshold="+regressionVal+" max/avg_displacement_threshold="+maxAvgVal+" absolute_displacement_threshold="+absVal+optionROIs+ " compute_overlap ignore_z_stage subpixel_accuracy computation_parameters=[Save computation time (but use more RAM)] image_output=[Fuse and display]";
+	stitchOptions = "type=[Positions from file] order=[Defined by TileConfiguration] directory=[&dir] layout_file=" + title1 + ".txt fusion_method=[&blendingOption] fusion=" + fusionVal + " regression_threshold=" + regressionVal + " max/avg_displacement_threshold=" + maxAvgVal + " absolute_displacement_threshold=" + absVal + optionROIs + " compute_overlap ignore_z_stage subpixel_accuracy computation_parameters=[Save computation time (but use more RAM)] image_output=[Fuse and display]";
 	run("Grid/Collection stitching", stitchOptions);
-	if(diagnostics) IJ.log("Stitch commands:\n" + stitchOptions);
+	if (diagnostics) IJ.log("Stitch commands:\n" + stitchOptions);
 	nTitle = prefixF + "_IJ-Stitch";
-	if (!startsWith(blendingOption, "Do not")){
+	if (!startsWith(blendingOption, "Do not")) {
 		waitForOpenWindow("Fused", 500, 1000, 1000 * tileN);
 		selectWindow("Fused");
 		rename(nTitle);
@@ -327,30 +325,30 @@
 		if (grayConvert) run("8-bit");
 		if (transferMetadata) setMetadata("Info", dsxEXIFData);
 	}
-	if (checkForMissingTiles){
+	if (checkForMissingTiles) {
 		regFileVariants = newArray(".registered", ".registered.txt", "txt.registered");
-		for (i=0, regFileFound=false; i<regFileVariants.length && regFileFound==false; i++){
-			if (File.exists(configPath + regFileVariants[i])){
+		for (i = 0, regFileFound = false; i < regFileVariants.length && regFileFound == false; i++) {
+			if (File.exists(configPath + regFileVariants[i])) {
 				regFilePath = configPath + regFileVariants[i];
 				regFileFound = true;
 			}
 		}
-		if (regFileFound){
+		if (regFileFound) {
 			registeredString = File.openAsString(regFilePath);
 			firstIJSHeaderLine = "# Define the number of dimensions we are working on";
 			lastIJSHeaderLine = "# Define the image coordinates\n";
-			if (indexOf(registeredString, firstIJSHeaderLine)==0) regType = "ijSReg";
+			if (indexOf(registeredString, firstIJSHeaderLine) == 0) regType = "ijSReg";
 			else exit("Registration file does does not have the expect first line of a registered IJS file");
 			headerText = firstIJSHeaderLine + "\ndim = 2\n\n" + lastIJSHeaderLine;
-			iLastIJSHeaderLine = indexOf(registeredString, lastIJSHeaderLine)+lastIJSHeaderLine.length;
-			if (iLastIJSHeaderLine<0) exit("Expected header line not found: " + lastIJSHeaderLine);
+			iLastIJSHeaderLine = indexOf(registeredString, lastIJSHeaderLine) + lastIJSHeaderLine.length;
+			if (iLastIJSHeaderLine < 0) exit("Expected header line not found: " + lastIJSHeaderLine);
 			fileLineList = substring(registeredString, iLastIJSHeaderLine);
 			iFile = 0;
 			prePath = "";
 			fileLines = split(fileLineList, "\n");
 			regLN = fileLines.length;
 			registeredFiles = newArray();
-			for(i=0; i<regLN; i++){
+			for (i = 0; i < regLN; i++) {
 				showProgress(i, regLN);
 				registeredFiles[i] = prePath + substring(fileLines[i], iFile, indexOf(fileLines[i], ";"));
 			}
@@ -361,72 +359,68 @@
 			missedYMin = yMax;
 			reTileConfig = "# Define the number of dimensions we are working on\ndim = 2\n\n# Define the image coordinates\n";
 			reTileConfigFP = reTileConfig;
-			for(i=0, mTileN=0; i<tileN; i++){
+			for (i = 0, mTileN = 0; i < tileN; i++) {
 				showProgress(i, tileN);
 				iReg = indexOfArrayThatContains(registeredFiles, filteredDSXMapFiles[i], -1);
-				if (iReg<0){
+				if (iReg < 0) {
 					missingTiles[mTileN] = filteredDSXMapFiles[i];
 					if (diagnostics) IJ.log(filteredDSXMapFiles[i] + " not found in registered list");
-					if (useStagePosn){
-							dsxEXIFDataTemp = getExifData(dir + filteredDSXMapFiles[i]);
-							stageXum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionX", true)) * 10E-4;
-							stageYum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionY", true)) * 10E-4;
-							if (diagnostics){
-								IJ.log("stageXum, stageXum-stageX0um, stageXum-stageX0um/pixelW, stageYum-stageY0um/pixelH");
-								IJ.log(stageXum+", "+stageXum-stageX0um+", "+(stageXum-stageX0um)/pixelW+", "+(stageYum-stageY0um)/pixelH);
-							}
-							tileXs[i] = abs((stageXum - stageX0um) / pixelW);
-							tileYs[i] = abs((stageYum - stageY0um) / pixelH);
-							fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s(tileXs[i], 1) + ", " +  d2s(tileYs[i], 1) + "\)\n";
-							reTileConfig += "" + fileString;
-							reTileConfigFP += "" + dir + fileString;
-					}
-					else {
-						fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s((tileXs[i]-1)*overlapAdvX, 0) + ", " +  d2s((tileYs[i]-1)*overlapAdvY, 0) + "\)\n";
+					if (useStagePosn) {
+						dsxEXIFDataTemp = getExifData(dir + filteredDSXMapFiles[i]);
+						stageXum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionX", true)) * 10E-4;
+						stageYum = parseInt(getDSXExifTagFromMetaData(dsxEXIFDataTemp, "StagePositionY", true)) * 10E-4;
+						if (diagnostics) {
+							IJ.log("stageXum, stageXum-stageX0um, stageXum-stageX0um/pixelW, stageYum-stageY0um/pixelH");
+							IJ.log(stageXum + ", " + stageXum - stageX0um + ", " + (stageXum - stageX0um) / pixelW + ", " + (stageYum - stageY0um) / pixelH);
+						}
+						tileXs[i] = abs((stageXum - stageX0um) / pixelW);
+						tileYs[i] = abs((stageYum - stageY0um) / pixelH);
+						fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s(tileXs[i], 1) + ", " + d2s(tileYs[i], 1) + "\)\n";
 						reTileConfig += "" + fileString;
-						reTileConfigFP += "" + dir + fileString;				
-					} 
+						reTileConfigFP += "" + dir + fileString;
+					} else {
+						fileString = filteredDSXMapFiles[i] + "\; \; \(" + d2s((tileXs[i] - 1) * overlapAdvX, 0) + ", " + d2s((tileYs[i] - 1) * overlapAdvY, 0) + "\)\n";
+						reTileConfig += "" + fileString;
+						reTileConfigFP += "" + dir + fileString;
+					}
 					missedXMax = maxOf(missedXMax, tileXs[i]);
 					missedYMax = maxOf(missedYMax, tileYs[i]);
 					missedXMin = minOf(missedXMin, tileXs[i]);
 					missedYMin = minOf(missedYMin, tileYs[i]);
 					mTileN++;
-				}
-				else if (diagnostics) IJ.log(filteredDSXMapFiles[i] + " found in registered list index: " + iReg);
+				} else if (diagnostics) IJ.log(filteredDSXMapFiles[i] + " found in registered list index: " + iReg);
 			}
-			if (mTileN>0) {
+			if (mTileN > 0) {
 				title1 = prefixF + "_Missed_TileConfiguration";
-				title2 = "["+title1+"]";
+				title2 = "[" + title1 + "]";
 				f = title2;
-				reConfigPath = dir + title1 +".txt";	
+				reConfigPath = dir + title1 + ".txt";
 				if (isOpen(title1))
-					 print(f, "\\Update:"); // clears the window
-				else run("Text Window...", "name="+title2+" width=72 height=8 menu");
+					print(f, "\\Update:"); // clears the window
+				else run("Text Window...", "name=" + title2 + " width=72 height=8 menu");
 				print(f, reTileConfig);
 				saveAs("Text", reConfigPath);
 				run("Close");
 				title1 = prefixF + "_Missed_Full-Path-TileConfiguration";
-				title2 = "["+title1+"]";
+				title2 = "[" + title1 + "]";
 				f = title2;
-				reConfigPathFP = dir + title1 +".txt";	
+				reConfigPathFP = dir + title1 + ".txt";
 				if (isOpen(title1))
-					 print(f, "\\Update:"); // clears the window
-				else run("Text Window...", "name="+title2+" width=72 height=8 menu");
+					print(f, "\\Update:"); // clears the window
+				else run("Text Window...", "name=" + title2 + " width=72 height=8 menu");
 				print(f, reTileConfigFP);
 				saveAs("Text", reConfigPathFP);
 				run("Close");
 				IJ.log(mTileN + " tiles missing from registration:\n" + reTileConfig + "\n" + reTileConfigFP);
 				IJ.log("Missing tile range: X" + missedXMin + "-" + missedXMax + " Y" + missedYMin + "-" + missedYMax);
 				IJ.log("Rerun config paths \(Missing tiles only\): " + reConfigPath + "\n" + reConfigPathFP);
-			}
-			else IJ.log("All " + tileN + " tiles were successfully registered");
+			} else IJ.log("All " + tileN + " tiles were successfully registered");
 			if (diagnostics) IJ.log(tileN + ": filtered tiles\n" + regLN + ": registered entries\n" + mTileN + ": missing tiles");
-		}
-		else IJ.log("Registration file for missing files not found");
+		} else IJ.log("Registration file for missing files not found");
 	}
 	if (!startsWith(blendingOption, "Do not")) {
 		selectWindow(nTitle);
-		if (is("composite") && compoConvert){
+		if (is("composite") && compoConvert) {
 			compoID = getImageID();
 			if (is("grayscale") && grayConvert) run("Z Project...", "projection=[Average Intensity]");
 			else run("Stack to RGB");
@@ -434,14 +428,13 @@
 			selectImage(compoID);
 			close();
 			selectImage(convID);
-		} 
+		}
 		safeSaveAndClose("tiff", dir, nTitle + ".tif", false);
-	}
-	else IJ.log(macroL + " completed, 'Do not fuse' selected");
-	call("ij.Prefs.set", "asc.stitch.helpers.lastPositionFile", regFilePath); 	
+	} else IJ.log(macroL + " completed, 'Do not fuse' selected");
+	call("ij.Prefs.set", "asc.stitch.helpers.lastPositionFile", regFilePath);
 	if (is("Batch Mode")) setBatchMode("exit & display");
 	call("java.lang.System.gc");
-	run("Collect Garbage"); 
+	run("Collect Garbage");
 	// IJ.log("Stitch commands:\n" + stitchOptions);
 	showStatus("Completed macro: " + macroL, "flash green");
 	/* End of Stitch_DSX_Mosaic_Using_Selected_Image_and_All_Others_in_Same_Directory macro */
